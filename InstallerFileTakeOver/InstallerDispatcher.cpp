@@ -4,7 +4,8 @@
 #include <Objbase.h>
 #include "resource.h"
 #include <string>
-
+#include <sddl.h>
+#include <vector>
 struct Internal {
 	WCHAR* targetdir;
 	WCHAR* msi_pkg;
@@ -46,6 +47,31 @@ bool InternalRecursiveRemoveDirectory(std::wstring dir)
 	return true;
 }
 
+WCHAR* __GetUserSid() {
+
+	HANDLE hprocess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_QUERY_INFORMATION, FALSE, GetCurrentProcessId());
+	HANDLE htoken = NULL;
+	OpenProcessToken(hprocess, TOKEN_ALL_ACCESS, &htoken);
+	CloseHandle(hprocess);
+	DWORD dwSize;
+	GetTokenInformation(htoken, TokenUser, nullptr, 0, &dwSize);
+
+	std::vector<BYTE> userbuffer(dwSize);
+
+	GetTokenInformation(htoken, TokenUser, &userbuffer[0], dwSize, &dwSize);
+
+	CloseHandle(htoken);
+
+	PTOKEN_USER user = reinterpret_cast<PTOKEN_USER>(&userbuffer[0]);
+
+	LPWSTR lpUser;
+	if (ConvertSidToStringSid(user->User.Sid, &lpUser))
+	{
+		return lpUser;
+	}
+	return NULL;
+
+}
 
 InstallerDispatcher::InstallerDispatcher() {
 
@@ -57,8 +83,15 @@ InstallerDispatcher::InstallerDispatcher() {
 	WCHAR temp_dir[MAX_PATH] = L"%TEMP%\\";
 	StringCchCat(temp_dir, MAX_PATH, mx);
 	ExpandEnvironmentStrings(temp_dir, msi_file, MAX_PATH);
+	WCHAR string_sd[512] = L"D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;\0";
+	StringCchCat(string_sd, 512, __GetUserSid());
+	StringCchCat(string_sd, 512, L")(A;OICI;FA;;;BA)\0");
+	PSECURITY_DESCRIPTOR sd = new SECURITY_DESCRIPTOR;
+	ULONG sd_sz = 0;
+	ConvertStringSecurityDescriptorToSecurityDescriptor(string_sd, SDDL_REVISION_1, &sd, &sd_sz);
+	SECURITY_ATTRIBUTES sa = { sizeof(sa), sd, FALSE };
 
-	HANDLE hmsi_file = CreateFile(msi_file, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	HANDLE hmsi_file = CreateFile(msi_file, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hmsi_file == INVALID_HANDLE_VALUE)
 		throw(GetLastError());
 	HMODULE hMod = GetModuleHandle(NULL);

