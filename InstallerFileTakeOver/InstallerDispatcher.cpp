@@ -74,7 +74,9 @@ WCHAR* __GetUserSid() {
 }
 
 InstallerDispatcher::InstallerDispatcher() {
-
+	WCHAR cfg_dir[MAX_PATH];
+	ExpandEnvironmentStrings(L"%SystemDrive%\\Config.Msi", cfg_dir, MAX_PATH);
+	CreateDirectory(cfg_dir, NULL);
 	GUID gd;
 	HRESULT hs = CoCreateGuid(&gd);
 	WCHAR mx[MAX_PATH];
@@ -123,13 +125,16 @@ void InstallerDispatcher::RunAdminInstall(WCHAR* targetdir) {
 	this->InstallerDispatcherThread = CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)RunAdminInstallInternal, (void*)&_int, NULL, &tid);
 }
 InstallerDispatcher::~InstallerDispatcher() {
-
+	
 	if (this->InstallerDispatcherThread) {
 		if (WaitForSingleObject(this->InstallerDispatcherThread, 5000) == WAIT_TIMEOUT) {
 			TerminateThread(this->InstallerDispatcherThread, 1);
 		}
 		CloseHandle(this->InstallerDispatcherThread);
 	}
+	WCHAR cfg_dir[MAX_PATH];
+	ExpandEnvironmentStrings(L"%SystemDrive%\\Config.Msi", cfg_dir, MAX_PATH);
+	InternalRecursiveRemoveDirectory(cfg_dir);
 	DeleteFile(msi_file);
 	InternalRecursiveRemoveDirectory(InternalInstallDir);
 }

