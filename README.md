@@ -2,7 +2,7 @@
 
 ![Screenshot](Untitled2.jpg)
 
-For your notes, this works in every supporting windows installation. Including Windows 11 & Server 2022 with (November 2021 patch.)
+[Fixed as CVE-2021-43883 in December 2021 patch](https://msrc.microsoft.com/update-guide/en-US/vulnerability/CVE-2021-43883)
 
 As some of you may notice, this also works in server installations. While Group Policy by default doesn't allow standard users to do any msi operation, the administrative install feature seems to be completely bypassing group policy.
 
